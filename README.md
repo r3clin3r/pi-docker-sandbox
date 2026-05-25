@@ -27,7 +27,7 @@ sbx secret set-custom -g \
   --value "${FIREWORKS_API_KEY@P}"
 ```
 
-This could alternatively be set to "proxy managed" via kit config.
+This is necessary because the pi harness/client checks validity of API_KEY format, otherwise one could use environment.proxyManaged in the kit spec.yaml file.
 
 To enter straight into a sandboxed pi with the real FIREWORKS_API_KEY injected via proxy, run:
 
