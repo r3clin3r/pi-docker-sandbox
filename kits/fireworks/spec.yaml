@@ -1,0 +1,43 @@
+schemaVersion: "1"
+kind: agent
+name: pi-fireworks
+displayName: Pi (fireworks.ai)
+description: Pi agent configured with fireworks.ai
+
+agent:
+  image: "pi-docker-sandbox:latest"
+  aiFilename: AGENTS.md
+  persistence: persistent
+  entrypoint:
+    run: [/home/agent/.local/share/pnpm/bin/pi]
+
+network:
+  serviceDomains:
+    api.fireworks.ai: fireworks
+  serviceAuth:
+    fireworks:
+      headerName: "Authorization"
+      valueFormat: "Bearer %s"
+  allowedDomains:
+    - "fireworks.ai:443"
+    - "*.fireworks.ai:443"
+
+credentials:
+  sources:
+    fireworks:
+      env:
+        - FIREWORKS_API_KEY
+
+commands:
+  install:
+    - command: |
+        cat > example.txt << 'EOF'
+        Example text
+        EOF
+      user: "1000"
+      description: Create an example file
+  startup:
+    - command: [source, ~/.bashrc]
+      user: 1000
+      background: false
+      description: Source bashrc to add pnpm to path
