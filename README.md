@@ -22,7 +22,8 @@ docker build -D -t pi-docker-sandbox:latest .
 ## Create and run the bare pi agent sandbox using the template and set things up.
 # This drops you into a shell, invoke pi yourself and set up your config.
 # Do not manually auth using an API key inside your local worktree or the sandbox--pi saves the key to disk.
-# Instead, rely on sbx injecting env vars from your local environment into relevant requests. 
+# Instead, rely on sbx injecting env vars from your local environment into relevant requests.
+# Make sure to add config in the agent's home dir, not the workspace, so the sandbox is portable.
 sbx run -t pi-docker-sandbox:latest shell
 
 
