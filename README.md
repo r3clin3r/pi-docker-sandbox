@@ -47,7 +47,7 @@ First add `FIREWORKS_API_KEY` to the Docker sbx proxy that intercepts outbound c
 sbx secret set-custom -g \
   --host api.fireworks.ai \
   --env FIREWORKS_API_KEY \
-  --placeholder "fw-{rand}" \
+  --placeholder "fw_{rand}" \
   --value "${FIREWORKS_API_KEY}"
 ```
 
