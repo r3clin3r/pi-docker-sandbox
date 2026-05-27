@@ -60,6 +60,3 @@ To enter straight into a sandboxed pi with the FIREWORKS_API_KEY injected via pr
 ```bash
 sbx run pi-fireworks --kit ./kits/fireworks/
 ```
-
-TODO:
- - Add session affinity plugin to kit (relies somewhat on https://github.com/docker/sbx-releases/issues/133)
