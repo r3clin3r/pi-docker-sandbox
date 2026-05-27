@@ -63,4 +63,3 @@ sbx run pi-fireworks --kit ./kits/fireworks/
 
 TODO:
  - Add session affinity plugin to kit (relies somewhat on https://github.com/docker/sbx-releases/issues/133)
- - Sourcing .bashrc in the kit commands might be superfluous, check it
