@@ -7,7 +7,6 @@ description: Pi agent configured with fireworks.ai
 agent:
   image: "pi-docker-sandbox:latest"
   aiFilename: AGENTS.md
-  persistence: persistent
   entrypoint:
     run: [bash, -l, -c, 'pi --offline']
 
