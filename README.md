@@ -58,5 +58,5 @@ The placeholder is necessary because the pi harness/client checks validity of th
 To enter straight into a sandboxed pi with the FIREWORKS_API_KEY injected via proxy, run:
 
 ```bash
-sbx run pi-fireworks --kit ./kits/fireworks/
+sbx run -t pi-docker-sandbox --kit ./kits/fireworks/
 ```
