@@ -14,6 +14,6 @@ RUN rm -rf /usr/share/sandbox/kit/pi
 
 # The base image labels itself as the `pi` kit. Point the label at this kit so
 # nothing resolves the descriptor we just removed.
-LABEL com.docker.dash.kit="fireworks"
+LABEL com.docker.dash.kit="pi-fireworks"
 
 USER agent

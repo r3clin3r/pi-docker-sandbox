@@ -54,7 +54,7 @@ From the directory you want the agent to work on, build the local kit and start
 pi:
 
 ```bash
-sbx run --name pi-fireworks /path/to/pi-docker-sandbox/kits/fireworks
+sbx run --name pi-fireworks /path/to/pi-docker-sandbox/kits/pi-fireworks
 ```
 
 `sbx` builds the kit on first use (reusing the build cache afterwards), mounts
@@ -67,7 +67,7 @@ Choose a model or thinking level when creating the sandbox:
 sbx run --name pi-fireworks \
   --kit-arg model=accounts/fireworks/models/deepseek-v4p1-flash \
   --kit-arg thinkingLevel=high \
-  /path/to/pi-docker-sandbox/kits/fireworks
+  /path/to/pi-docker-sandbox/kits/pi-fireworks
 ```
 
 Restarting an existing sandbox reuses the kit configuration it was created
@@ -76,9 +76,9 @@ different name.
 
 ## What the kit configures
 
-`kits/fireworks/fireworks.yaml` is the v3 workload descriptor:
+`kits/pi-fireworks/pi-fireworks.yaml` is the v3 workload descriptor:
 
-- **Base image** — the companion `fireworks.dockerfile` starts `FROM
+- **Base image** — the companion `pi-fireworks.dockerfile` starts `FROM
   docker.io/sbx/pi:latest` and deletes `/usr/share/sandbox/kit/pi`, the
   official descriptor that declares Anthropic network access and an Anthropic
   credential.
@@ -101,7 +101,7 @@ source directory:
 
 ```bash
 docker login
-docker buildx build ./kits/fireworks -f ./kits/fireworks/fireworks.yaml \
+docker buildx build ./kits/pi-fireworks -f ./kits/pi-fireworks/pi-fireworks.yaml \
   -t docker.io/<NAMESPACE>/pi-fireworks:1.0.0 --push
 ```
 

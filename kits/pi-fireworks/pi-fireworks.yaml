@@ -6,7 +6,7 @@
 # (docker.io/sbx/pi), which ships pi and the `sbx` launch contract. That image
 # embeds its own kit descriptor under /usr/share/sandbox/kit/pi, declaring
 # Anthropic network access and an Anthropic credential. The companion
-# fireworks.dockerfile removes that descriptor, so this workload carries no
+# pi-fireworks.dockerfile removes that descriptor, so this workload carries no
 # bundled-provider configuration and only ever talks to fireworks.ai.
 #
 # The rest of the official workload's behaviour — session verbs, project-trust
