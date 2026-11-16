@@ -1,0 +1,226 @@
+# syntax=docker/sandbox-kit:3
+#
+# Pi (fireworks.ai) — a v3 workload kit.
+#
+# The workload starts from Docker's official hardened pi image
+# (docker.io/sbx/pi), which ships pi and the `sbx` launch contract. That image
+# embeds its own kit descriptor under /usr/share/sandbox/kit/pi, declaring
+# Anthropic network access and an Anthropic credential. The companion
+# fireworks.dockerfile removes that descriptor, so this workload carries no
+# bundled-provider configuration and only ever talks to fireworks.ai.
+#
+# The rest of the official workload's behaviour — session verbs, project-trust
+# and model settings, skills, and agent context — is restated here without the
+# Anthropic capability. Fireworks requests are authenticated by the sandbox
+# proxy: the container only ever sees a sentinel in FIREWORKS_API_KEY.
+schemaVersion: "3"
+kind: workload
+displayName: Pi (fireworks.ai)
+description: Pi coding agent configured for fireworks.ai
+sourceUrl: https://github.com/r3clin3r/pi-docker-sandbox
+licenses: [MIT]
+
+args:
+  model:
+    default: ""
+    pattern: '^[A-Za-z0-9._/:-]*$'
+    description: fireworks model id (accounts/fireworks/models/...), or provider/model; empty keeps pi's default
+    env: PI_KIT_MODEL
+  thinkingLevel:
+    default: ""
+    enum: ["", "off", minimal, low, medium, high, xhigh, max]
+    description: Thinking level (settings.json `defaultThinkingLevel`); empty keeps pi's default of medium
+    env: PI_KIT_THINKING_LEVEL
+
+version: "1.5.2"
+provides: ["pi@1.5.2"]
+
+capabilities:
+  # This workload is an agent sandbox: the host launches the agent rather than
+  # running the image entrypoint as PID 1.
+  - type: com.docker.sandbox/sbx@1
+
+  # Egress for the fireworks API, pi's own metadata/update host, pi's runtime
+  # npm installs, and the apt mirrors the base image uses.
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow:
+          - api.fireworks.ai:443
+          - "*.fireworks.ai:443"
+          - pi.dev:443
+          - registry.npmjs.org:443
+          - deb.debian.org:80
+          - dhi.io:80
+
+  # Fireworks API access. The host stores the real key under the `fireworks`
+  # service; the container receives a sentinel in FIREWORKS_API_KEY and the
+  # proxy swaps it for the real value on the way to api.fireworks.ai.
+  - type: com.docker.sandbox/credential@1
+    name: Fireworks access
+    optional: true
+    description: Fireworks AI API access
+    config:
+      service: fireworks
+      phase: runtime
+      apiKey:
+        name: FIREWORKS_API_KEY
+        proxyManaged: true
+        inject:
+          - {domain: api.fireworks.ai, header: Authorization, format: "Bearer %s"}
+
+  # Session control surface: drive pi without a human at the terminal.
+  - type: com.docker.sandbox/agent-sessions@1
+    description: Drive pi sessions programmatically
+    config:
+      prompt: ["-p", "--", "{{.Prompt}}"]
+      continue: ["--continue"]
+      resume: ["--session", "{{.SessionID}}"]
+      list: [/opt/pi-sessions/list-sessions.sh]
+
+  # Interactive twin: pi's TUI verbs for a human at the terminal.
+  - type: com.docker.sandbox/agent-interactive-sessions@1
+    optional: true
+    description: Open pi's terminal UI on a chosen session
+    config:
+      prompt: ["--", "{{.Prompt}}"]
+      continue: ["--continue"]
+      resume: ["--session", "{{.SessionID}}"]
+      sessionPicker: ["--resume"]
+
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        # ~/.pi/agent holds settings, auth, extensions, and sessions. The
+        # runtime may create it root-owned before hooks run, so re-own it.
+        - command: mkdir -p /home/agent/.pi/agent/extensions && chown agent:agent /home/agent/.pi /home/agent/.pi/agent /home/agent/.pi/agent/extensions
+          user: "0"
+          description: Ensure ~/.pi is agent-owned before seeding
+        # Seed settings.json. defaultProjectTrust is load-bearing: pi's default
+        # is "ask", which deadlocks a non-interactive session. Rewritten on
+        # every (re)create so a changed kit arg is picked up.
+        - command: |
+            set -e
+            model='${{ kit.args.model }}'
+            thinking='${{ kit.args.thinkingLevel }}'
+            MODEL=''
+            THINKING=''
+            if [ -n "$model" ]; then
+              provider=fireworks
+              case "$model" in
+                accounts/*) ;;
+                */*) provider=${model%%/*}; model=${model#*/} ;;
+              esac
+              MODEL="  \"defaultProvider\": \"$provider\",
+              \"defaultModel\": \"$model\",
+            "
+            fi
+            [ -z "$thinking" ] || THINKING="  \"defaultThinkingLevel\": \"$thinking\",
+            "
+            mkdir -p /home/agent/.pi/agent
+            printf '%s' "{
+              \"\$schema\": \"https://pi.dev/schemas/settings.schema.json\",
+            ${MODEL}${THINKING}  \"defaultProjectTrust\": \"always\"
+            }
+            " > /home/agent/.pi/agent/settings.json
+          user: agent
+          description: Seed pi settings.json (project trust, model, thinking level)
+        # Fireworks session affinity: pin each session to one backend for
+        # prompt-cache reuse.
+        - command: |
+            cat > /home/agent/.pi/agent/extensions/fireworks-session-affinity.ts << 'EOF'
+            import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+            /**
+             * Fireworks Session Affinity Plugin
+             *
+             * Injects an x-session-affinity header into requests made to the Fireworks
+             * provider, using the pi session ID as the value. This ensures consistent
+             * routing for multi-turn conversations with Fireworks AI models.
+             *
+             * Installation:
+             *   Copy this file to ~/.pi/agent/extensions/fireworks-session-affinity.ts
+             *   Or use: pi -e ./fireworks-session-affinity.ts
+             *
+             * The plugin will automatically inject the header for all Fireworks requests
+             * when using pi's built-in Fireworks provider.
+             */
+            export default function (pi: ExtensionAPI) {
+              // Register the session affinity header when session starts
+              pi.on("session_start", async (_event, ctx) => {
+                // Get the session ID from the session manager
+                const sessionId = ctx.sessionManager?.getSessionId?.();
+
+                // Skip if we don't have a session ID (ephemeral mode)
+                if (!sessionId) {
+                  return;
+                }
+
+                // Override the Fireworks provider with the session-specific header
+                // When only headers is provided (no models), all existing models are preserved
+                pi.registerProvider("fireworks", {
+                  headers: {
+                    "x-session-affinity": sessionId,
+                  },
+                });
+              });
+            }
+            EOF
+          user: agent
+          description: Install the Fireworks session-affinity extension
+        # Point npm at the sandbox proxy so pi's runtime npm use works in exec
+        # contexts that do not inherit the proxy environment.
+        - command: 'if [ -n "${HTTP_PROXY:-}" ]; then npm config set proxy="$HTTP_PROXY" https-proxy="${HTTPS_PROXY:-$HTTP_PROXY}"; fi'
+          user: agent
+          env: [HTTP_PROXY, HTTPS_PROXY]
+          description: Point npm at the sandbox proxy for pi's runtime package installs
+      startup:
+        - command: [sh, -c, "command -v apt-get > /dev/null 2>&1 && (apt-get update -qq -y > /dev/null 2>&1 || true)"]
+          user: "0"
+          background: true
+          description: Update apt package cache in background
+
+  # Where pi reads the cross-agent skills tree, so the host's store reaches it.
+  - type: com.docker.sandbox/agent-skills@1
+    optional: true
+    config:
+      path: /home/agent/.agents/skills
+
+  # Offer both context versions during the runtime rollout; select one.
+  - type: com.docker.sandbox/agent-context@1
+    optional: true
+    config: &agent-context
+      filename: AGENTS.md
+      directory: /home/agent/.pi/agent
+      content: |
+        ## Pi (fireworks.ai)
+
+        pi is installed at `/usr/local/share/npm-global/bin/pi`, which is on `PATH`; the image entrypoint starts it. Run
+        `pi` for the interactive TUI, or `pi -p "<prompt>"` for a one-shot run. `pi --continue` resumes the most recent
+        session for this directory and `pi --resume` opens the session selector.
+
+        pi does not ask for approval before tool calls. The one prompt it would raise — project trust — is pre-answered
+        in `~/.pi/agent/settings.json` (`defaultProjectTrust: "always"`). That is deliberate: the container is the
+        sandbox, and a prompt nobody can answer would deadlock a non-interactive session.
+
+        Authentication is proxy-mediated. `FIREWORKS_API_KEY` in this container is a sentinel, not a key; the sandbox
+        proxy substitutes the real credential bound on the host on requests to `api.fireworks.ai`. There is no real
+        credential in this container. Do not run `pi auth login` — it would try to complete a browser flow against a
+        host the sandbox does not allow, and write a real token over that state. Never print or reconfigure the sentinel.
+
+        A `fireworks-session-affinity` extension under `~/.pi/agent/extensions` adds an `x-session-affinity` header so a
+        session sticks to one backend and can reuse its prompt cache.
+
+        Skills are read from `~/.agents/skills`, where the host's shared skills store mounts. `pi install npm:<pkg>` and
+        `pi update` reach `registry.npmjs.org`, which is allowed; a package that pulls from anywhere else is refused by
+        the sandbox's network policy. The `find` tool uses the `fd` binary this image carries, and `grep` uses `rg`.
+
+        ## Installing packages
+
+        The image ships a small toolset: shell and CLI tools, git, gh, Docker, and Node 24 with npm. Install anything
+        else with `sudo apt-get update && sudo apt-get install -y <package>`; `sudo` needs no password. Debian trixie
+        (`deb.debian.org`) and Docker Hardened Images (`dhi.io`) are configured and reachable through the sandbox proxy.
+
+  - type: com.docker.sandbox/agent-context@2
+    optional: true
+    config: *agent-context
