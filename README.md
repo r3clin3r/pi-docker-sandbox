@@ -14,39 +14,15 @@ machine is running Linux. Docker with Buildx is needed to build kits.
 
 ## Store the fireworks key
 
-Credentials are injected by the sandbox proxy. The real key stays on the host;
-the container only ever sees a proxy-managed sentinel.
+Credentials are injected by the sandbox proxy.
 
 ```bash
 printf '%s' "$FIREWORKS_API_KEY" | sbx secret set fireworks
 ```
 
-`sbx` gives the sandbox a sentinel shaped like a fireworks key (`fw_...`) and
-swaps it for the real value on requests to `api.fireworks.ai`. The agent never
+`sbx` gives the sandbox a fake key like a fireworks key (`fw_...`) and
+swaps it on the host for the real value on requests to `api.fireworks.ai`. The agent never
 sees the real key.
-
-<details>
-<summary>Fallback: custom secret with an explicit placeholder</summary>
-
-If an older `sbx` produces a sentinel that pi's format check rejects, key the
-secret to the host and environment variable directly, with a fireworks-shaped
-placeholder:
-
-```bash
-printf '%s' "$FIREWORKS_API_KEY" | sbx secret set-custom -g \
-  --host api.fireworks.ai \
-  --env FIREWORKS_API_KEY \
-  --placeholder "fw_{rand}" \
-  --value-stdin
-```
-
-The proxy substitutes the placeholder on outbound requests to the configured
-host. In this mode the kit's `credential@1` entry is optional and is skipped
-when no `fireworks` service secret is bound, so remove any stored `fireworks`
-service secret (`sbx secret rm fireworks`) to avoid two secrets claiming the
-same environment variable.
-
-</details>
 
 ## Run the sandbox
 
@@ -54,7 +30,7 @@ From the directory you want the agent to work on, build the local kit and start
 pi:
 
 ```bash
-sbx run --name pi-fireworks /path/to/pi-docker-sandbox/kits/pi-fireworks
+sbx run --name pi-myproject /path/to/pi-docker-sandbox/kits/pi-fireworks
 ```
 
 `sbx` builds the kit on first use (reusing the build cache afterwards), mounts
@@ -66,7 +42,7 @@ Choose a model or thinking level when creating the sandbox:
 ```bash
 sbx run --name pi-fireworks \
   --kit-arg model=accounts/fireworks/models/deepseek-v4p1-flash \
-  --kit-arg thinkingLevel=high \
+  --kit-arg thinkingLevel=low \
   /path/to/pi-docker-sandbox/kits/pi-fireworks
 ```
 
@@ -93,24 +69,3 @@ different name.
   and thinking level) and points npm at the sandbox proxy.
 - **Agent context** — `~/.pi/agent/AGENTS.md` describing the proxy-mediated
   auth, skills, and package installation.
-
-## Publish the kit (optional)
-
-Build and push the kit as an OCI artifact so others can run it without the
-source directory:
-
-```bash
-docker login
-docker buildx build ./kits/pi-fireworks -f ./kits/pi-fireworks/pi-fireworks.yaml \
-  -t docker.io/<NAMESPACE>/pi-fireworks:1.0.0 --push
-```
-
-Then run it by reference:
-
-```bash
-sbx run docker.io/<NAMESPACE>/pi-fireworks:1.0.0
-```
-
-The build needs a builder that supports the OCI exporter (the `sbx` kit
-builder, or a `docker-container` Buildx driver); the default `docker` driver
-does not.
