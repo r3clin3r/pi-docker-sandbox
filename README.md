@@ -17,7 +17,14 @@ machine is running Linux. Docker with Buildx is needed to build kits.
 Credentials are injected by the sandbox proxy.
 
 ```bash
+# to use key from your host env
 printf '%s' "$FIREWORKS_API_KEY" | sbx secret set fireworks
+
+# to set a key interactively
+sbx secret set fireworks
+
+# to set a key for a specific project
+sbx secret set fireworks --sandbox pi-myproject
 ```
 
 `sbx` gives the sandbox a fake key like a fireworks key (`fw_...`) and
