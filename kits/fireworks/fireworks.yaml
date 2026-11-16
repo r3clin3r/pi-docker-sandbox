@@ -40,6 +40,12 @@ capabilities:
   # running the image entrypoint as PID 1.
   - type: com.docker.sandbox/sbx@1
 
+  # Default compute. Operators can override with `sbx run --cpus … --memory …`.
+  - type: com.docker.sandbox/resources@1
+    config:
+      cpu: 2
+      memory: 4g
+
   # Egress for the fireworks API, pi's own metadata/update host, pi's runtime
   # npm installs, and the apt mirrors the base image uses.
   - type: com.docker.sandbox/network-policy@1
@@ -93,7 +99,7 @@ capabilities:
       install:
         # ~/.pi/agent holds settings, auth, extensions, and sessions. The
         # runtime may create it root-owned before hooks run, so re-own it.
-        - command: mkdir -p /home/agent/.pi/agent/extensions && chown agent:agent /home/agent/.pi /home/agent/.pi/agent /home/agent/.pi/agent/extensions
+        - command: mkdir -p /home/agent/.pi/agent && chown agent:agent /home/agent/.pi /home/agent/.pi/agent
           user: "0"
           description: Ensure ~/.pi is agent-owned before seeding
         # Seed settings.json. defaultProjectTrust is load-bearing: pi's default
@@ -125,49 +131,6 @@ capabilities:
             " > /home/agent/.pi/agent/settings.json
           user: agent
           description: Seed pi settings.json (project trust, model, thinking level)
-        # Fireworks session affinity: pin each session to one backend for
-        # prompt-cache reuse.
-        - command: |
-            cat > /home/agent/.pi/agent/extensions/fireworks-session-affinity.ts << 'EOF'
-            import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-
-            /**
-             * Fireworks Session Affinity Plugin
-             *
-             * Injects an x-session-affinity header into requests made to the Fireworks
-             * provider, using the pi session ID as the value. This ensures consistent
-             * routing for multi-turn conversations with Fireworks AI models.
-             *
-             * Installation:
-             *   Copy this file to ~/.pi/agent/extensions/fireworks-session-affinity.ts
-             *   Or use: pi -e ./fireworks-session-affinity.ts
-             *
-             * The plugin will automatically inject the header for all Fireworks requests
-             * when using pi's built-in Fireworks provider.
-             */
-            export default function (pi: ExtensionAPI) {
-              // Register the session affinity header when session starts
-              pi.on("session_start", async (_event, ctx) => {
-                // Get the session ID from the session manager
-                const sessionId = ctx.sessionManager?.getSessionId?.();
-
-                // Skip if we don't have a session ID (ephemeral mode)
-                if (!sessionId) {
-                  return;
-                }
-
-                // Override the Fireworks provider with the session-specific header
-                // When only headers is provided (no models), all existing models are preserved
-                pi.registerProvider("fireworks", {
-                  headers: {
-                    "x-session-affinity": sessionId,
-                  },
-                });
-              });
-            }
-            EOF
-          user: agent
-          description: Install the Fireworks session-affinity extension
         # Point npm at the sandbox proxy so pi's runtime npm use works in exec
         # contexts that do not inherit the proxy environment.
         - command: 'if [ -n "${HTTP_PROXY:-}" ]; then npm config set proxy="$HTTP_PROXY" https-proxy="${HTTPS_PROXY:-$HTTP_PROXY}"; fi'
@@ -207,9 +170,6 @@ capabilities:
         proxy substitutes the real credential bound on the host on requests to `api.fireworks.ai`. There is no real
         credential in this container. Do not run `pi auth login` — it would try to complete a browser flow against a
         host the sandbox does not allow, and write a real token over that state. Never print or reconfigure the sentinel.
-
-        A `fireworks-session-affinity` extension under `~/.pi/agent/extensions` adds an `x-session-affinity` header so a
-        session sticks to one backend and can reuse its prompt cache.
 
         Skills are read from `~/.agents/skills`, where the host's shared skills store mounts. `pi install npm:<pkg>` and
         `pi update` reach `registry.npmjs.org`, which is allowed; a package that pulls from anywhere else is refused by

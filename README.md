@@ -90,9 +90,7 @@ different name.
   to `api.fireworks.ai`.
 - **Session control** — headless and interactive pi session verbs.
 - **Setup** — seeds `~/.pi/agent/settings.json` (project trust, optional model
-  and thinking level), installs a `fireworks-session-affinity` extension that
-  pins each session to one backend for prompt-cache reuse, and points npm at
-  the sandbox proxy.
+  and thinking level) and points npm at the sandbox proxy.
 - **Agent context** — `~/.pi/agent/AGENTS.md` describing the proxy-mediated
   auth, skills, and package installation.
 
